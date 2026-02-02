@@ -12,29 +12,37 @@ jobs:
   rollback:
     runs-on: ubuntu-latest
     steps:
-    - name: Setup kubectl
-      uses: azure/setup-kubectl@v3
-      with:
-        version: 'v1.28.0'
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Configure kubectl
-      run: |
-        mkdir -p $HOME/.kube
-        echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+      - name: Install Minikube
+        run: |
+          curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+          sudo install minikube-linux-amd64 /usr/local/bin/minikube
 
-    - name: Rollback deployment
-      run: |
-        if [ -n "${{ github.event.inputs.revision }}" ]; then
-          kubectl rollout undo deployment/cicd-app --to-revision=${{ github.event.inputs.revision }}
-        else
-          kubectl rollout undo deployment/cicd-app
-        fi
+      - name: Start Minikube
+        run: |
+          minikube start --driver=docker --kubernetes-version=v1.28.0 --memory=2048 --cpus=2
+          minikube status
 
-    - name: Wait for rollback completion
-      run: |
-        kubectl rollout status deployment/cicd-app --timeout=300s
+      - name: Configure kubectl
+        run: |
+          mkdir -p $HOME/.kube
+          minikube kubectl -- get nodes
 
-    - name: Verify rollback
-      run: |
-        kubectl get pods -l app=cicd-app
-        kubectl describe deployment cicd-app
+      - name: Rollback deployment
+        run: |
+          if [ -n "${{ github.event.inputs.revision }}" ]; then
+            minikube kubectl -- rollout undo deployment/cicd-app --to-revision=${{ github.event.inputs.revision }}
+          else
+            minikube kubectl -- rollout undo deployment/cicd-app
+          fi
+
+      - name: Wait for rollback completion
+        run: |
+          minikube kubectl -- rollout status deployment/cicd-app --timeout=300s
+
+      - name: Verify rollback
+        run: |
+          minikube kubectl -- get pods -l app=cicd-app
+          minikube kubectl -- describe deployment cicd-app
